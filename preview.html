@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>网络测速</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#141824;color:#fff;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+/* ===== 主容器 ===== */
+.app-wrap{width:100%;height:100%;display:flex;flex-direction:column;position:relative}
+
+/* ===== 顶部标题 ===== */
+.page-header{flex-shrink:0;text-align:center;padding:14px 0 8px;font-size:18px;font-weight:600;color:#fff;letter-spacing:1px}
+
+/* ===== 指标栏 ===== */
+.metrics-bar{flex-shrink:0;display:flex;justify-content:space-around;padding:8px 16px 14px;position:relative}
+.metrics-bar::after{content:'';position:absolute;bottom:0;left:16px;right:16px;height:1px;background:rgba(255,255,255,0.06)}
+.metric-item{text-align:center;flex:1}
+.metric-label{display:block;font-size:12px;color:#8a92a8;margin-bottom:6px}
+.metric-value{display:block;font-size:20px;font-weight:600;color:#3a5a8a;min-height:26px;font-variant-numeric:tabular-nums;transition:color .3s}
+.metric-value.active-ping{color:#4A9DFF}
+.metric-value.active-dl{color:#4A9DFF}
+.metric-value.active-ul{color:#4A9DFF}
+
+/* ===== 提示条 ===== */
+.tip-bar{flex-shrink:0;text-align:center;padding:8px 16px;font-size:11px;color:#FF9F43;letter-spacing:.3px}
+
+/* ===== 仪表盘区域 ===== */
+.gauge-area{flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0;position:relative}
+.gauge-wrap{position:relative;width:300px;height:260px}
+#speed-gauge{width:100%;height:100%}
+.gauge-center{position:absolute;top:52%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+.gauge-speed{display:block;font-size:52px;font-weight:700;line-height:1;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-1px;transition:color .3s}
+.gauge-speed.testing{color:#4A9DFF}
+.gauge-unit{display:block;font-size:13px;color:#8a92a8;margin-top:4px;letter-spacing:1px}
+
+/* ===== 开始按钮 ===== */
+.action-area{flex-shrink:0;display:flex;justify-content:center;padding:12px 0 16px}
+.btn-go{width:70%;max-width:280px;height:48px;border-radius:24px;border:none;outline:none;background:linear-gradient(180deg,#4A9DFF 0%,#2B7AE8 100%);color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:2px;box-shadow:0 4px 16px rgba(43,122,232,0.35)}
+.btn-go:active{transform:scale(0.97);box-shadow:0 2px 8px rgba(43,122,232,0.25)}
+.btn-go.testing{background:linear-gradient(180deg,#FF9F43 0%,#E8862B 100%);box-shadow:0 4px 16px rgba(255,159,67,0.35)}
+
+/* ===== 图表区域 ===== */
+.charts-area{flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px;margin-top:4px}
+.chart-box{background:#1a1f2e;border-radius:10px;padding:10px 12px;position:relative;overflow:hidden}
+.chart-box::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:16px 16px;pointer-events:none}
+.chart-title{font-size:11px;color:#6a7490;margin-bottom:6px;position:relative;z-index:1}
+.chart-title .dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.chart-title .dot.dl{background:#4A9DFF}
+.chart-title .dot.ul{background:#FF9F43}
+.chart-box canvas{width:100%;height:60px;position:relative;z-index:1}
+
+/* ===== 结果区域 ===== */
+.result-area{flex-shrink:0;display:none;flex-direction:column;padding:0 12px;margin-top:8px}
+.result-area.show{display:flex}
+.result-row{display:flex;justify-content:space-around;padding:14px 0;background:#1a1f2e;border-radius:12px;margin-bottom:8px}
+.res-item{text-align:center;flex:1;position:relative}
+.res-item:first-child::after{content:'';position:absolute;right:0;top:12%;height:76%;width:1px;background:rgba(255,255,255,0.06)}
+.res-val{display:block;font-size:28px;font-weight:700;color:#4A9DFF;line-height:1;font-variant-numeric:tabular-nums}
+.res-val.up{color:#FF9F43}
+.res-unit{font-size:11px;color:#6a7490}
+.res-lbl{font-size:11px;color:#6a7490;margin-top:3px}
+
+.extra-row{display:flex;justify-content:space-around;padding:12px 0;background:#1a1f2e;border-radius:12px}
+.ext-item{text-align:center;flex:1}
+.ext-val{display:block;font-size:18px;font-weight:600;color:#ccd6f6}
+.ext-lbl{font-size:10px;color:#6a7490;margin-top:2px}
+
+/* ===== 底部信息栏 ===== */
+.info-bar{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;margin:8px 12px 0;background:#1a1f2e;border-radius:12px}
+.info-left,.info-right{display:flex;align-items:center;gap:10px}
+.info-icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.info-icon svg{width:22px;height:22px}
+.info-txt{display:flex;flex-direction:column}
+.info-main{font-size:14px;font-weight:600;color:#fff}
+.info-sub{font-size:12px;color:#6a7490;margin-top:1px}
+.info-right{cursor:pointer}
+.info-right .info-main{color:#4A9DFF;display:flex;align-items:center;gap:3px;font-size:13px;font-weight:500}
+.info-arrow{font-size:10px;color:#4A9DFF}
+.info-label{font-size:10px;color:#6a7490;margin-bottom:1px}
+
+/* ===== 底部导航 ===== */
+.bottom-nav{flex-shrink:0;height:56px;background:#141824;border-top:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-around;align-items:center;padding-bottom:env(safe-area-inset-bottom,0)}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 12px;color:#5a6278;transition:color .2s}
+.nav-item.active{color:#4A9DFF}
+.nav-item svg{width:20px;height:20px}
+.nav-label{font-size:10px}
+
+/* ===== 服务器列表页 ===== */
+.page{position:fixed;inset:0;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch;background:#141824;z-index:10}
+.page.active{display:block}
+.page::-webkit-scrollbar{display:none}
+
+.server-page-header{position:sticky;top:0;z-index:100;background:rgba(20,24,36,0.95);backdrop-filter:blur(10px);padding:14px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.04)}
+.back-btn{background:none;border:none;color:#fff;cursor:pointer;padding:4px;display:flex;align-items:center}
+.page-title{font-size:17px;font-weight:600;flex:1;text-align:center;margin-right:36px}
+.server-list{padding:12px 16px;padding-bottom:80px}
+.server-group{margin-bottom:6px}
+.server-group-title{padding:8px 12px;font-size:12px;color:#6a7490;font-weight:600;background:#1a1f2e;border-radius:6px;margin-bottom:4px}
+.server-option{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#1a1f2e;border:1px solid rgba(255,255,255,0.04);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:all .2s}
+.server-option.selected{border-color:#4A9DFF;background:rgba(74,157,255,0.05)}
+.server-name{font-size:14px;color:#ccd6f6}
+.server-speed{font-size:11px;color:#6a7490;margin-top:2px}
+.server-check{width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center}
+.server-option.selected .server-check{background:#4A9DFF;border-color:#4A9DFF}
+
+/* ===== Toast ===== */
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.9);background:rgba(26,31,46,0.95);color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;opacity:0;pointer-events:none;transition:all .3s;border:1px solid rgba(255,255,255,0.06)}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.hidden{display:none!important}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.page.active>*{animation:fadeIn .25s ease}
+</style>
+</head>
+<body>
+<div class="app-wrap" id="app-wrap">
+
+<!-- 首页 -->
+<div id="page-home" class="page active">
+  <div class="page-header">网络测速</div>
+
+  <div class="metrics-bar">
+    <div class="metric-item">
+      <span class="metric-label">Ping时延</span>
+      <span class="metric-value" id="ping-value">--</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">下行速率</span>
+      <span class="metric-value" id="dl-metric">--</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">上行速率</span>
+      <span class="metric-value" id="ul-metric">--</span>
+    </div>
+  </div>
+
+  <div class="tip-bar">未开启定位权限，可能无法享受完整测速功能及其他工具哦~</div>
+
+  <div class="gauge-area">
+    <div class="gauge-wrap">
+      <canvas id="speed-gauge" width="300" height="260"></canvas>
+      <div class="gauge-center">
+        <span class="gauge-speed" id="current-speed">0.00</span>
+        <span class="gauge-unit" id="speed-unit">Mbps</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-area">
+    <button id="btn-go" class="btn-go">开始测试</button>
+  </div>
+
+  <div class="charts-area">
+    <div class="chart-box">
+      <div class="chart-title"><span class="dot dl"></span>下行速率</div>
+      <canvas id="dl-wave" width="200" height="60"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title"><span class="dot ul"></span>上行速率</div>
+      <canvas id="ul-wave" width="200" height="60"></canvas>
+    </div>
+  </div>
+
+  <div class="result-area" id="result-area">
+    <div class="result-row">
+      <div class="res-item">
+        <span class="res-val" id="res-dl">0</span>
+        <span class="res-unit">Mbps</span>
+        <div class="res-lbl">下载速度</div>
+      </div>
+      <div class="res-item">
+        <span class="res-val up" id="res-ul">0</span>
+        <span class="res-unit">Mbps</span>
+        <div class="res-lbl">上传速度</div>
+      </div>
+    </div>
+    <div class="extra-row">
+      <div class="ext-item"><span class="ext-val" id="res-ping">0</span><span class="ext-lbl">PING/ms</span></div>
+      <div class="ext-item"><span class="ext-val" id="res-jitter">0</span><span class="ext-lbl">抖动/ms</span></div>
+      <div class="ext-item"><span class="ext-val" id="res-loss">--</span><span class="ext-lbl">丢包/%</span></div>
+    </div>
+  </div>
+
+  <div class="info-bar">
+    <div class="info-left">
+      <div class="info-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#8a92a8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      </div>
+      <div class="info-txt">
+        <span class="info-main" id="user-ip">223.104.104.243</span>
+        <span class="info-sub" id="user-op">中国移动</span>
+      </div>
+    </div>
+    <div class="info-right" onclick="app.showServerPage()">
+      <div class="info-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#8a92a8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </div>
+      <div class="info-txt">
+        <span class="info-label">测速服务器</span>
+        <span class="info-main" id="srv-name">石家庄移动 <span class="info-arrow">&#9664;</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 占位让内容不被导航栏遮挡 -->
+  <div style="height:12px;flex-shrink:0"></div>
+</div>
+
+<!-- 服务器列表 -->
+<div id="page-server" class="page">
+  <div class="server-page-header">
+    <button class="back-btn" onclick="app.back()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="page-title">测速服务器</div>
+  </div>
+  <div class="server-list" id="server-list"></div>
+</div>
+
+<!-- 底部导航 -->
+<nav class="bottom-nav" id="bottom-nav">
+  <div class="nav-item active" data-page="home" onclick="app.switchTab('home')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    <span class="nav-label">网络测速</span>
+  </div>
+  <div class="nav-item" data-page="exp" onclick="app.switchTab('exp')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    <span class="nav-label">体验测速</span>
+  </div>
+  <div class="nav-item" data-page="auto" onclick="app.switchTab('auto')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>
+    <span class="nav-label">自动测速</span>
+  </div>
+  <div class="nav-item" data-page="diag" onclick="app.switchTab('diag')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    <span class="nav-label">网络诊断</span>
+  </div>
+  <div class="nav-item" data-page="set" onclick="app.switchTab('set')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.68 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span class="nav-label">设置</span>
+  </div>
+</nav>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ==================== 仪表盘 ====================
+class SpeedGauge {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.maxValue = 5000;
+    this.smoothValue = 0;
+    this.targetValue = 0;
+    this.animFrame = null;
+
+    // 刻度定义: label + 对应数值
+    this.scaleData = [
+      {label:'0',val:0},{label:'5',val:5},{label:'10',val:10},{label:'20',val:20},
+      {label:'50',val:50},{label:'100',val:100},{label:'200',val:200},{label:'500',val:500},
+      {label:'1G',val:1000},{label:'2G',val:2000},{label:'5G',val:5000}
+    ];
+
+    this.startAngle = Math.PI * 0.78;
+    this.endAngle   = Math.PI * 2.22;
+    this.totalAngle = this.endAngle - this.startAngle;
+  }
+
+  // 对数映射: 数值 -> 角度
+  valueToAngle(v) {
+    if (v <= 0) return this.startAngle;
+    const t = Math.log(v + 1) / Math.log(this.maxValue + 1);
+    return this.startAngle + t * this.totalAngle;
+  }
+
+  draw(value) {
+    this.targetValue = Math.max(0, Math.min(value, this.maxValue));
+    this.animateTo();
+  }
+
+  animateTo() {
+    if (this.animFrame) cancelAnimationFrame(this.animFrame);
+    const step = () => {
+      const diff = this.targetValue - this.smoothValue;
+      this.smoothValue += diff * 0.15;
+      if (Math.abs(diff) < 0.2) this.smoothValue = this.targetValue;
+      this.render();
+      if (Math.abs(diff) > 0.2) this.animFrame = requestAnimationFrame(step);
+    };
+    step();
+  }
+
+  render() {
+    const ctx = this.ctx;
+    const w = this.canvas.width, h = this.canvas.height;
+    const cx = w / 2, cy = h / 2 + 10;
+    const r = Math.min(w, h) / 2 - 18;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const valAngle = this.valueToAngle(this.smoothValue);
+
+    // === 外圈背景弧 ===
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, this.startAngle, this.endAngle);
+    ctx.strokeStyle = '#1e2744';
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // === 刻度线和数字 ===
+    this.scaleData.forEach((sd, i) => {
+      const angle = this.valueToAngle(sd.val);
+      const isMajor = true; // 所有都是主刻度
+      const innerR = r - 10;
+      const outerR = r + 3;
+
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
+      ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
+      ctx.strokeStyle = '#3a4a6a';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 刻度数字
+      const lr = r + 20;
+      ctx.fillStyle = '#7a8aaa';
+      ctx.font = '500 10px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // 微调文字位置避免重叠
+      let tx = cx + Math.cos(angle) * lr;
+      let ty = cy + Math.sin(angle) * lr;
+
+      // 对底部附近的刻度稍微向外推
+      const deg = (angle * 180 / Math.PI) % 360;
+      if (deg > 330 || deg < 30) { tx += 2; ty += 4; }
+      else if (deg > 150 && deg < 210) { tx -= 2; }
+
+      ctx.fillText(sd.label, tx, ty);
+    });
+
+    // === 小刻度 (在每两个大刻度之间均匀分布4个小刻度) ===
+    for (let i = 0; i < this.scaleData.length - 1; i++) {
+      const a1 = this.valueToAngle(this.scaleData[i].val);
+      const a2 = this.valueToAngle(this.scaleData[i+1].val);
+      for (let j = 1; j <= 4; j++) {
+        const angle = a1 + (a2 - a1) * (j / 5);
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(angle) * (r - 4), cy + Math.sin(angle) * (r - 4));
+        ctx.lineTo(cx + Math.cos(angle) * (r - 1), cy + Math.sin(angle) * (r - 1));
+        ctx.strokeStyle = '#2a3a5a';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // === 进度弧 (测速时显示) ===
+    if (this.smoothValue > 1) {
+      const grad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+      grad.addColorStop(0, '#3A9DFF');
+      grad.addColorStop(0.5, '#4AADFF');
+      grad.addColorStop(1, '#5ABDFF');
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, this.startAngle, valAngle);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 14;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = '#4A9DFF';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+      ctx.restore();
+
+      // 末端亮点
+      const tipX = cx + Math.cos(valAngle) * r;
+      const tipY = cy + Math.sin(valAngle) * r;
+      const tg = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, 10);
+      tg.addColorStop(0, 'rgba(74,157,255,0.7)');
+      tg.addColorStop(1, 'rgba(74,157,255,0)');
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 10, 0, Math.PI * 2);
+      ctx.fillStyle = tg;
+      ctx.fill();
+    }
+
+    // === 指针 (始终显示，灰色) ===
+    const needleAngle = this.smoothValue > 1 ? valAngle : this.valueToAngle(2);
+    const needleLen = r - 20;
+    const nx = cx + Math.cos(needleAngle) * needleLen;
+    const ny = cy + Math.sin(needleAngle) * needleLen;
+
+    // 指针主体
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(nx, ny);
+    ctx.strokeStyle = this.smoothValue > 1 ? '#ccd6f6' : '#7a8aaa';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // 中心圆
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#141824';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = this.smoothValue > 1 ? '#4A9DFF' : '#5a6a8a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = this.smoothValue > 1 ? '#4A9DFF' : '#5a6a8a';
+    ctx.fill();
+  }
+}
+
+// ==================== 波形图 ====================
+class WaveChart {
+  constructor(canvas, color='#4A9DFF') {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.color = color;
+    this.data = [];
+    this.maxPoints = 40;
+  }
+  add(v) {
+    this.data.push(v);
+    if (this.data.length > this.maxPoints) this.data.shift();
+    this.draw();
+  }
+  clear() { this.data = []; this.draw(); }
+  draw() {
+    const ctx = this.ctx, w = this.canvas.width, h = this.canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (this.data.length < 2) return;
+    const maxV = Math.max(...this.data, 10);
+    const pad = 3, ch = h - pad * 2;
+
+    // fill
+    ctx.beginPath(); ctx.moveTo(0, h);
+    this.data.forEach((v, i) => {
+      const px = (i / (this.maxPoints - 1)) * w;
+      const py = pad + ch - (v / maxV) * ch;
+      if (i === 0) ctx.lineTo(px, py);
+      else { const pp = ((i-1)/(this.maxPoints-1))*w, ppy = pad + ch - (this.data[i-1]/maxV)*ch; const cpx = (pp+px)/2; ctx.bezierCurveTo(cpx, ppy, cpx, py, px, py); }
+    });
+    ctx.lineTo(w, h); ctx.closePath();
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, this.color + '35');
+    g.addColorStop(1, this.color + '05');
+    ctx.fillStyle = g; ctx.fill();
+
+    // line
+    ctx.beginPath();
+    this.data.forEach((v, i) => {
+      const px = (i / (this.maxPoints - 1)) * w;
+      const py = pad + ch - (v / maxV) * ch;
+      if (i === 0) ctx.moveTo(px, py);
+      else { const pp = ((i-1)/(this.maxPoints-1))*w, ppy = pad + ch - (this.data[i-1]/maxV)*ch; const cpx = (pp+px)/2; ctx.bezierCurveTo(cpx, ppy, cpx, py, px, py); }
+    });
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+  }
+}
+
+// ==================== 应用 ====================
+const app = {
+  testing: false,
+  aborted: false,
+  gauge: null,
+  dlWave: null,
+  ulWave: null,
+  curPage: 'home',
+  servers: [
+    {id:1,name:'石家庄移动',region:'河北',dl:500,ul:200,ping:12,jitter:3,loss:0},
+    {id:2,name:'北京电信',region:'北京',dl:800,ul:300,ping:8,jitter:2,loss:0},
+    {id:3,name:'上海联通',region:'上海',dl:600,ul:250,ping:10,jitter:2,loss:0},
+    {id:4,name:'广州移动',region:'广东',dl:700,ul:280,ping:14,jitter:3,loss:0}
+  ],
+  server: null,
+  $:{},
+
+  init() {
+    this.cacheDOM();
+    this.server = this.servers[0];
+    this.gauge = new SpeedGauge(this.$['speed-gauge']);
+    this.gauge.draw(0);
+    this.dlWave = new WaveChart(this.$['dl-wave'], '#4A9DFF');
+    this.ulWave = new WaveChart(this.$['ul-wave'], '#FF9F43');
+    this.renderServerList();
+    this.bindEvents();
+  },
+
+  cacheDOM() {
+    ['speed-gauge','current-speed','speed-unit','btn-go','ping-value','dl-metric','ul-metric',
+     'dl-wave','ul-wave','result-area','res-dl','res-ul','res-ping','res-jitter','res-loss',
+     'srv-name','server-list','toast'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) this.$[id] = el;
+    });
+  },
+
+  bindEvents() {
+    this.$['btn-go'].addEventListener('click', () => {
+      if (this.testing) { this.aborted = true; }
+      else { this.startTest(); }
+    });
+  },
+
+  async startTest() {
+    if (this.testing || !this.server) return;
+    this.testing = true;
+    this.aborted = false;
+
+    const btn = this.$['btn-go'];
+    const speedEl = this.$['current-speed'];
+    const unitEl = this.$['speed-unit'];
+    const pingEl = this.$['ping-value'];
+    const dlM = this.$['dl-metric'];
+    const ulM = this.$['ul-metric'];
+    const resArea = this.$['result-area'];
+
+    btn.classList.add('testing');
+    btn.textContent = '停止';
+    resArea.classList.remove('show');
+    this.dlWave.clear();
+    this.ulWave.clear();
+    speedEl.classList.add('testing');
+    dlM.textContent = '--'; dlM.className = 'metric-value';
+    ulM.textContent = '--'; ulM.className = 'metric-value';
+
+    // Ping
+    unitEl.textContent = 'ms';
+    pingEl.className = 'metric-value active-ping';
+    await this.doPing(pingEl);
+    if (this.aborted) return this.reset();
+
+    // Download
+    unitEl.textContent = 'Mbps';
+    pingEl.className = 'metric-value';
+    dlM.className = 'metric-value active-dl';
+    const dlR = await this.runTest('download');
+    if (this.aborted) return this.reset();
+
+    // Upload
+    ulM.className = 'metric-value active-ul';
+    const ulR = await this.runTest('upload');
+    if (this.aborted) return this.reset();
+
+    // Done
+    speedEl.textContent = dlR.avg.toFixed(2);
+    speedEl.classList.remove('testing');
+    unitEl.textContent = 'Mbps';
+
+    this.$['res-dl'].textContent = dlR.avg;
+    this.$['res-ul'].textContent = ulR.avg;
+    this.$['res-ping'].textContent = this.server.ping;
+    this.$['res-jitter'].textContent = this.server.jitter;
+    this.$['res-loss'].textContent = this.server.loss + '%';
+    resArea.classList.add('show');
+    this.gauge.draw(dlR.avg);
+    this.reset();
+  },
+
+  async doPing(el) {
+    for (let i = 0; i <= 6; i++) {
+      if (this.aborted) return;
+      el.textContent = Math.max(1, this.server.ping + Math.floor(Math.random()*8-4)) + 'ms';
+      await this.sleep(300);
+    }
+  },
+
+  async runTest(type) {
+    const base = type === 'download' ? this.server.dl : this.server.ul;
+    const wave = type === 'download' ? this.dlWave : this.ulWave;
+    const speedEl = this.$['current-speed'];
+    const metricEl = type === 'download' ? this.$['dl-metric'] : this.$['ul-metric'];
+    let cs = 0, mx = 0, sm = 0, pc = 0;
+
+    for (let i = 0; i < 30; i++) {
+      if (this.aborted) break;
+      const p = i / 30;
+      let f;
+      if (p < 0.15) f = (p/0.15)*0.55;
+      else if (p < 0.4) f = 0.55 + (p-0.15)/0.25*0.35;
+      else f = 0.9 + Math.sin(p*15)*0.06;
+      cs = Math.max(0.5, base * f * (1 + (Math.random()-0.5)*0.2));
+      cs = Math.round(cs*100)/100;
+      mx = Math.max(mx, cs); sm += cs; pc++;
+      speedEl.textContent = cs.toFixed(2);
+      this.gauge.draw(cs);
+      wave.add(cs);
+      if (metricEl) metricEl.textContent = cs.toFixed(2) + 'Mbps';
+      await this.sleep(200);
+    }
+    return {avg: pc>0 ? Math.round(sm/pc*100)/100 : 0, max: Math.round(mx*100)/100};
+  },
+
+  reset() {
+    this.testing = false;
+    this.aborted = false;
+    const btn = this.$['btn-go'];
+    btn.classList.remove('testing');
+    btn.textContent = '开始测试';
+    this.$['current-speed'].classList.remove('testing');
+  },
+
+  switchTab(page) {
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === page));
+    if (page === 'home') {
+      document.getElementById('page-home').classList.add('active');
+      document.getElementById('page-server').classList.remove('active');
+    } else {
+      this.showToast('功能开发中');
+    }
+  },
+
+  showServerPage() {
+    document.getElementById('page-home').classList.remove('active');
+    document.getElementById('page-server').classList.add('active');
+  },
+
+  back() {
+    document.getElementById('page-server').classList.remove('active');
+    document.getElementById('page-home').classList.add('active');
+  },
+
+  selectServer(id) {
+    const s = this.servers.find(x => x.id === id);
+    if (!s) return;
+    this.server = s;
+    this.$['srv-name'].innerHTML = s.name + ' <span class="info-arrow">&#9664;</span>';
+    this.renderServerList();
+    this.back();
+  },
+
+  renderServerList() {
+    const container = this.$['server-list'];
+    if (!container) return;
+    const groups = {};
+    this.servers.forEach(s => {
+      if (!groups[s.region]) groups[s.region] = [];
+      groups[s.region].push(s);
+    });
+    container.innerHTML = Object.entries(groups).map(([region, list]) => {
+      return `<div class="server-group">
+        <div class="server-group-title">${region}</div>
+        ${list.map(s => {
+          const sel = this.server && this.server.id === s.id;
+          return `<div class="server-option ${sel?'selected':''}" onclick="app.selectServer(${s.id})">
+            <div><div class="server-name">${s.name}</div><div class="server-speed">下行 ${s.dl}Mbps / 上行 ${s.ul}Mbps</div></div>
+            <div class="server-check">${sel?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+  },
+
+  showToast(msg) {
+    const t = this.$['toast'];
+    if (!t) return;
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  },
+
+  sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+};
+
+document.addEventListener('DOMContentLoaded', () => app.init());
+</script>
+</body>
+</html>
